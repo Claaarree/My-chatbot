@@ -1,12 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Message, ChatState } from './types';
+import { Message, ChatSession } from './types';
 import { MockAIService } from './mockAI';
-
-type ChatSession = {
-  id: string;
-  name: string;
-  messages: Message[];
-};
 
 
 const LOCAL_STORAGE_KEY = 'mychatbot_sessions';
@@ -74,11 +68,17 @@ const App: React.FC = () => {
       sender: 'user',
       timestamp: new Date()
     };
-    setSessions((prev) => prev.map(session =>
-      session.id === activeSessionId
-        ? { ...session, messages: [...session.messages, userMessage] }
-        : session
-    ));
+    setSessions((prev) => prev.map(session => {
+      if (session.id === activeSessionId) {
+        // If this is the first user message, rename the tab
+        if (session.messages.length === 0) {
+          const firstWord = text.trim().split(/\s+/)[0];
+          return { ...session, messages: [userMessage], name: firstWord };
+        }
+        return { ...session, messages: [...session.messages, userMessage] };
+      }
+      return session;
+    }));
     setIsLoading(true);
     setInputText('');
     try {
@@ -150,13 +150,35 @@ const App: React.FC = () => {
 
       <div className="session-tabs">
         {sessions.map(session => (
-          <button
-            key={session.id}
-            className={`session-tab${session.id === activeSessionId ? ' active' : ''}`}
-            onClick={() => handleSwitchSession(session.id)}
-          >
-            {session.name}
-          </button>
+          <div key={session.id} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <button
+              className={`session-tab${session.id === activeSessionId ? ' active' : ''}`}
+              onClick={() => handleSwitchSession(session.id)}
+            >
+              {session.name}
+            </button>
+            {sessions.length > 1 && (
+              <button
+                className="session-tab-close"
+                title="Delete chat"
+                onClick={() => {
+                  const idx = sessions.findIndex(s => s.id === session.id);
+                  const newSessions = sessions.filter(s => s.id !== session.id);
+                  setSessions(newSessions);
+                  // If deleting active, switch to previous or next
+                  if (activeSessionId === session.id) {
+                    if (newSessions.length > 0) {
+                      const newIdx = idx > 0 ? idx - 1 : 0;
+                      setActiveSessionId(newSessions[newIdx].id);
+                    }
+                  }
+                }}
+                style={{ position: 'absolute', right: 4, top: 4, width: 18, height: 18, border: 'none', background: 'transparent', color: '#888', fontSize: 14, cursor: 'pointer', borderRadius: '50%' }}
+              >
+                ×
+              </button>
+            )}
+          </div>
         ))}
         <button className="session-tab new-session" onClick={handleNewSession} title="Start new chat">
           ＋

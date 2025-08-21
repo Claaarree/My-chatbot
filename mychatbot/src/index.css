@@ -386,6 +386,35 @@ body {
   color: #005fa3;
 }
 
+.session-tab-close {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: #888;
+  font-size: 20px;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background 0.2s, color 0.2s, opacity 0.2s;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.session-tab:hover + .session-tab-close,
+.session-tab-close:hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.session-tab-close:hover {
+  background: #f5f7fa;
+  color: #d32f2f;
+}
+
 @keyframes slideIn {
   from {
     opacity: 0;

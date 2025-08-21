@@ -5,10 +5,11 @@ export interface Message {
   timestamp: Date;
 }
 
-export interface ChatState {
+export interface ChatSession {
+  id: string;
+  name: string;
   messages: Message[];
-  isLoading: boolean;
-}
+};
 
 export interface MockAIResponse {
   response: string;
