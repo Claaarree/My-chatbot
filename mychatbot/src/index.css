@@ -332,6 +332,60 @@ body {
   box-shadow: 0 2px 8px rgba(21, 101, 192, 0.2);
 }
 
+.session-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 16px 24px 0 24px;
+  background: transparent;
+  border-bottom: 1px solid #e5e8ef;
+  margin-bottom: 0;
+}
+
+.session-tab {
+  background: #e7eaf3;
+  color: #0078d4;
+  border: none;
+  border-radius: 16px 16px 0 0;
+  padding: 8px 24px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  outline: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.session-tab.active {
+  background: #0078d4;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0,120,212,0.08);
+}
+
+.session-tab:hover:not(.active) {
+  background: #d0d7e6;
+  color: #005fa3;
+}
+
+.session-tab.new-session {
+  background: #e7eaf3;
+  color: #0078d4;
+  border: none;
+  border-radius: 16px 16px 0 0;
+  padding: 8px 24px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  outline: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.session-tab.new-session:hover {
+  background: #d0d7e6;
+  color: #005fa3;
+}
+
 @keyframes slideIn {
   from {
     opacity: 0;

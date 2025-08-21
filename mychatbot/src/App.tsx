@@ -2,12 +2,19 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Message, ChatState } from './types';
 import { MockAIService } from './mockAI';
 
+type ChatSession = {
+  id: string;
+  name: string;
+  messages: Message[];
+};
+
 
 const App: React.FC = () => {
-  const [chatState, setChatState] = useState<ChatState>({
-    messages: [],
-    isLoading: false
-  });
+  const [sessions, setSessions] = useState<ChatSession[]>([
+    { id: 'session-1', name: 'Chat 1', messages: [] }
+  ]);
+  const [activeSessionId, setActiveSessionId] = useState('session-1');
+  const [isLoading, setIsLoading] = useState(false);
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -15,7 +22,7 @@ const App: React.FC = () => {
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatState.messages, chatState.isLoading]);
+  }, [sessions, activeSessionId, isLoading]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -27,56 +34,54 @@ const App: React.FC = () => {
 
   // Reselects text box after getting a response
   useEffect(() => {
-    if (!chatState.isLoading) {
+    if (!isLoading) {
       inputRef.current?.focus();
     }
-  }, [chatState.isLoading]);
+  }, [isLoading]);
 
   const sendMessage = async (text: string) => {
-    if (!text.trim() || chatState.isLoading) return;
-
+    if (!text.trim() || isLoading) return;
     const userMessage: Message = {
       id: Date.now().toString(),
       text: text.trim(),
       sender: 'user',
       timestamp: new Date()
     };
-
-    setChatState((prev: ChatState) => ({
-      messages: [...prev.messages, userMessage],
-      isLoading: true
-    }));
-
+    setSessions((prev) => prev.map(session =>
+      session.id === activeSessionId
+        ? { ...session, messages: [...session.messages, userMessage] }
+        : session
+    ));
+    setIsLoading(true);
     setInputText('');
-
     try {
       const aiResponse = await MockAIService.getResponse(text.trim());
-
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: aiResponse.response,
         sender: 'bot',
         timestamp: new Date()
       };
-
-      setChatState((prev: ChatState) => ({
-        messages: [...prev.messages, botMessage],
-        isLoading: false
-      }));
+      setSessions((prev) => prev.map(session =>
+        session.id === activeSessionId
+          ? { ...session, messages: [...session.messages, botMessage] }
+          : session
+      ));
+      setIsLoading(false);
     } catch (error) {
       console.error('Error getting AI response:', error);
-
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: "I'm sorry, I encountered an error while processing your request. Please try again! 😅",
         sender: 'bot',
         timestamp: new Date()
       };
-
-      setChatState((prev: ChatState) => ({
-        messages: [...prev.messages, errorMessage],
-        isLoading: false
-      }));
+      setSessions((prev) => prev.map(session =>
+        session.id === activeSessionId
+          ? { ...session, messages: [...session.messages, errorMessage] }
+          : session
+      ));
+      setIsLoading(false);
     }
   };
 
@@ -85,14 +90,20 @@ const App: React.FC = () => {
     sendMessage(inputText);
   };
 
- const handleSuggestionClick = (suggestion: string) => {
+  const handleNewSession = () => {
+    const newId = `session-${Date.now()}`;
+    setSessions(prev => [...prev, { id: newId, name: `Chat ${prev.length + 1}`, messages: [] }]);
+    setActiveSessionId(newId);
+  };
+
+  const handleSwitchSession = (id: string) => {
+    setActiveSessionId(id);
+  };
+
+  const handleSuggestionClick = (suggestion: string) => {
     sendMessage(suggestion);
     setInputText('');
     inputRef.current?.focus();
-  };
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -102,6 +113,7 @@ const App: React.FC = () => {
     }
   };
 
+  const activeSession = sessions.find(s => s.id === activeSessionId);
   return (
     <div className="app">
       <header className="header">
@@ -109,9 +121,24 @@ const App: React.FC = () => {
         <p>Your friendly AI assistant answering questions since 2022</p>
       </header>
 
+      <div className="session-tabs">
+        {sessions.map(session => (
+          <button
+            key={session.id}
+            className={`session-tab${session.id === activeSessionId ? ' active' : ''}`}
+            onClick={() => handleSwitchSession(session.id)}
+          >
+            {session.name}
+          </button>
+        ))}
+        <button className="session-tab new-session" onClick={handleNewSession} title="Start new chat">
+          ＋
+        </button>
+      </div>
+
       <div className="chat-container">
         <div className="messages-area">
-          {chatState.messages.length === 0 ? (
+          {activeSession && activeSession.messages.length === 0 ? (
             <div className="empty-state">
               <h3>👋 Welcome to My Chatbot!</h3>
               <p>
@@ -131,7 +158,7 @@ const App: React.FC = () => {
             </div>
           ) : (
             <>
-              {chatState.messages.map((message: Message) => (
+              {activeSession && activeSession.messages.map((message: Message) => (
                 <div key={message.id} className={`message ${message.sender}`}>
                   <div className="message-avatar">
                     {message.sender === 'user' ? '👤' : '🤖'}
@@ -150,8 +177,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
               ))}
-              
-              {chatState.isLoading && (
+              {isLoading && (
                 <div className="message bot">
                   <div className="message-avatar">🤖</div>
                   <div className="message-content">
@@ -181,14 +207,14 @@ const App: React.FC = () => {
                 onKeyPress={handleKeyPress}
                 placeholder="Type your message here... (Press Enter to send)"
                 className="message-input"
-                disabled={chatState.isLoading}
+                disabled={isLoading}
                 rows={1}
               />
             </div>
             <button
               type="submit"
               className="send-button"
-              disabled={!inputText.trim() || chatState.isLoading}
+              disabled={!inputText.trim() || isLoading}
               title="Send message"
             >
               ➤
