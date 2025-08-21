@@ -9,15 +9,42 @@ type ChatSession = {
 };
 
 
+const LOCAL_STORAGE_KEY = 'mychatbot_sessions';
+
 const App: React.FC = () => {
-  const [sessions, setSessions] = useState<ChatSession[]>([
-    { id: 'session-1', name: 'Chat 1', messages: [] }
-  ]);
-  const [activeSessionId, setActiveSessionId] = useState('session-1');
+  const [sessions, setSessions] = useState<ChatSession[]>(() => {
+    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // fallback to default if corrupted
+        return [{ id: 'session-1', name: 'Chat 1', messages: [] }];
+      }
+    }
+    return [{ id: 'session-1', name: 'Chat 1', messages: [] }];
+  });
+  const [activeSessionId, setActiveSessionId] = useState(() => {
+    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (saved) {
+      try {
+        const sessions = JSON.parse(saved);
+        return sessions[0]?.id || 'session-1';
+      } catch {
+        return 'session-1';
+      }
+    }
+    return 'session-1';
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Persist sessions to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sessions));
+  }, [sessions]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
