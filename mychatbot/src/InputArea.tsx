@@ -42,8 +42,7 @@ const InputArea: React.FC<InputAreaProps> = ({ inputText, onInputChange, onKeyPr
 
   return (
     <div className="input-area">
-      <form onSubmit={onSubmit} className="input-form">
-        <div className="input-wrapper" style={{ position: 'relative' }}>
+      <form onSubmit={onSubmit} className="input-form">        <div className="input-wrapper">
           <textarea
             ref={inputRef}
             value={inputText}
@@ -57,13 +56,12 @@ const InputArea: React.FC<InputAreaProps> = ({ inputText, onInputChange, onKeyPr
           {speechSupported && (
             <button
               type="button"
-              className="mic-button"
+              className={`mic-button ${isListening ? 'listening' : ''}`}
               onClick={handleMicClick}
               disabled={isLoading || isListening}
               title={isListening ? 'Listening...' : 'Speak your message'}
-              style={{ position: 'absolute', right: 8, bottom: 8, background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 22, color: isListening ? '#1565c0' : '#888', transition: 'color 0.2s' }}
             >
-              <img src="/microphone-svgrepo-com.svg" alt="mic" style={{ width: 22, height: 22, verticalAlign: 'middle' }} />
+              <img src="/microphone-svgrepo-com.svg" alt="mic" />
             </button>
           )}
         </div>

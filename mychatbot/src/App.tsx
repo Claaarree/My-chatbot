@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Message, ChatSession } from './types';
 import { MockAIService } from './mockAI';
 import SessionTabs from './SessionTabs';
@@ -54,10 +54,10 @@ const App: React.FC = () => {
       }
     }
     return 'session-1';
-  });
-  const [isLoading, setIsLoading] = useState(false);
+  });  const [isLoading, setIsLoading] = useState(false);
   const [inputText, setInputText] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -102,8 +102,7 @@ const App: React.FC = () => {
         setSidebarOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener('mousedown', handleClick);    return () => document.removeEventListener('mousedown', handleClick);
   }, [sidebarOpen]);
 
   const sendMessage = async (text: string) => {
@@ -154,8 +153,7 @@ const App: React.FC = () => {
           : session
       ));
       setIsLoading(false);
-    }
-  };
+    }  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,24 +184,49 @@ const App: React.FC = () => {
     setInputText(e.target.value);
   }
 };
-
   const activeSession = sessions.find(s => s.id === activeSessionId);
+  
+  // Search functionality
+  const filteredMessages = useMemo(() => {
+    if (!searchTerm.trim()) {
+      return activeSession?.messages || [];
+    }
+    
+    return (activeSession?.messages || []).filter(message =>
+      message.text.toLowerCase().includes(searchTerm.toLowerCase())
+    );  }, [activeSession?.messages, searchTerm]);
+  const clearSearch = () => {
+    setSearchTerm('');
+  };
+
+  const handleJumpToMessage = (messageId: string) => {
+    // Clear search to show all messages
+    clearSearch();
+    
+    // Wait for re-render then scroll to message
+    setTimeout(() => {
+      const messageElement = document.getElementById(`message-${messageId}`);
+      if (messageElement) {
+        messageElement.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+        
+        // Add temporary highlight effect
+        messageElement.classList.add('message-highlighted');
+        setTimeout(() => {
+          messageElement.classList.remove('message-highlighted');
+        }, 2000);
+      }
+    }, 100);
+  };
+  
   return (
     <div className={`app app-with-drawer${sidebarOpen ? '' : ' sidebar-closed'}`}> 
-      {/* Overlay for closing sidebar on click */}
-      {sidebarOpen && (
+      {/* Overlay for closing sidebar on click */}      {sidebarOpen && (
         <div
           className="sidebar-overlay"
           onClick={() => setSidebarOpen(false)}
-          style={{
-            position: 'fixed',
-            left: 0,
-            top: 0,
-            width: '100vw',
-            height: '100vh',
-            zIndex: 199,
-            background: 'rgba(30,34,126,0.10)',
-          }}
         />
       )}
       <aside className="sidebar">
@@ -239,29 +262,56 @@ const App: React.FC = () => {
           onNew={() => {}}
         />
       </aside>
-      <div className="chat-main">
-        <header className="header">
+      <div className="chat-main">        <header className="header">
           <h1>🤖 My Chatbot</h1>
-          <p>Your friendly AI assistant answering questions since 2022</p>
+          <p>Your friendly AI assistant answering questions since 2022</p>          <div className="search-container">
+            <div className="search-input-wrapper">
+              <input
+                type="text"
+                className="search-input"
+                placeholder="Search messages..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              {searchTerm && (
+                <button
+                  className="search-clear-btn"
+                  onClick={clearSearch}
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            {searchTerm && (
+              <div className="search-results-info">
+                {filteredMessages.length} result{filteredMessages.length !== 1 ? 's' : ''}
+              </div>
+            )}
+          </div>
           <button
-            className="sidebar-toggle"
-            style={{ zIndex: 300 }}
+            className="sidebar-toggle sidebar-toggle-active"
             onClick={() => setSidebarOpen((open) => !open)}
             aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
           >
             {sidebarOpen ? '❮' : '❯'}
           </button>
-        </header>
-        <div className="chat-container">
-          <MessageList
-            messages={activeSession ? activeSession.messages : []}
+        </header>        <div className="chat-container">          <MessageList
+            messages={searchTerm ? filteredMessages : activeSession?.messages || []}
             isLoading={isLoading}
             messagesEndRef={messagesEndRef}
             suggestions={MockAIService.getSuggestedQuestions()}
+            searchTerm={searchTerm}
+            filteredMessages={filteredMessages}
+            onJumpToMessage={handleJumpToMessage}
             onSuggestionClick={(suggestion: string) => {
               sendMessage(suggestion);
               setInputText('');
               inputRef.current?.focus();
+            }}
+            onNewChat={() => {
+              setSearchTerm(''); // Clear search
+              handleNewSession(); // Start new session
             }}
           />
           <InputArea
