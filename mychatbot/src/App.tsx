@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Message, ChatSession } from './types';
 import { MockAIService } from './mockAI';
+import SessionTabs from './SessionTabs';
+import MessageList from './MessageList';
+import InputArea from './InputArea';
 
 
 const LOCAL_STORAGE_KEY = 'mychatbot_sessions';
@@ -127,11 +130,11 @@ const App: React.FC = () => {
     setActiveSessionId(id);
   };
 
-  const handleSuggestionClick = (suggestion: string) => {
-    sendMessage(suggestion);
-    setInputText('');
-    inputRef.current?.focus();
-  };
+  // const handleSuggestionClick = (suggestion: string) => {
+  //   sendMessage(suggestion);
+  //   setInputText('');
+  //   inputRef.current?.focus();
+  // };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -139,6 +142,14 @@ const App: React.FC = () => {
       handleSubmit(e);
     }
   };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement> | string) => {
+  if (typeof e === 'string') {
+    setInputText(e);
+  } else {
+    setInputText(e.target.value);
+  }
+};
 
   const activeSession = sessions.find(s => s.id === activeSessionId);
   return (
@@ -148,129 +159,44 @@ const App: React.FC = () => {
         <p>Your friendly AI assistant answering questions since 2022</p>
       </header>
 
-      <div className="session-tabs">
-        {sessions.map(session => (
-          <div key={session.id} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <button
-              className={`session-tab${session.id === activeSessionId ? ' active' : ''}`}
-              onClick={() => handleSwitchSession(session.id)}
-            >
-              {session.name}
-            </button>
-            {sessions.length > 1 && (
-              <button
-                className="session-tab-close"
-                title="Delete chat"
-                onClick={() => {
-                  const idx = sessions.findIndex(s => s.id === session.id);
-                  const newSessions = sessions.filter(s => s.id !== session.id);
-                  setSessions(newSessions);
-                  // If deleting active, switch to previous or next
-                  if (activeSessionId === session.id) {
-                    if (newSessions.length > 0) {
-                      const newIdx = idx > 0 ? idx - 1 : 0;
-                      setActiveSessionId(newSessions[newIdx].id);
-                    }
-                  }
-                }}
-                style={{ position: 'absolute', right: 4, top: 4, width: 18, height: 18, border: 'none', background: 'transparent', color: '#888', fontSize: 14, cursor: 'pointer', borderRadius: '50%' }}
-              >
-                ×
-              </button>
-            )}
-          </div>
-        ))}
-        <button className="session-tab new-session" onClick={handleNewSession} title="Start new chat">
-          ＋
-        </button>
-      </div>
+      <SessionTabs
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSwitch={handleSwitchSession}
+        onNew={handleNewSession}
+        onDelete={(id: string) => {
+          const idx = sessions.findIndex(s => s.id === id);
+          const newSessions = sessions.filter(s => s.id !== id);
+          setSessions(newSessions);
+          if (activeSessionId === id && newSessions.length > 0) {
+            const newIdx = idx > 0 ? idx - 1 : 0;
+            setActiveSessionId(newSessions[newIdx].id);
+          }
+        }}
+      />
 
       <div className="chat-container">
-        <div className="messages-area">
-          {activeSession && activeSession.messages.length === 0 ? (
-            <div className="empty-state">
-              <h3>👋 Welcome to My Chatbot!</h3>
-              <p>
-                I'm here to chat with you! Ask me anything or try one of these suggestions:
-              </p>
-              <div className="suggestions">
-                {MockAIService.getSuggestedQuestions().map((suggestion: string, index: number) => (
-                  <button
-                    key={index}
-                    className="suggestion-chip"
-                    onClick={() => handleSuggestionClick(suggestion)}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <>
-              {activeSession && activeSession.messages.map((message: Message) => (
-                <div key={message.id} className={`message ${message.sender}`}>
-                  <div className="message-avatar">
-                    {message.sender === 'user' ? '👤' : '🤖'}
-                  </div>
-                  <div className="message-content">
-                    <div>{message.text}</div>
-                      <div className="message-time">
-                        {(() => {
-                          const d = new Date(message.timestamp);
-                          const day = String(d.getDate()).padStart(2, '0');
-                          const month = String(d.getMonth() + 1).padStart(2, '0');
-                          const year = d.getFullYear();
-                          return `${day}/${month}/${year} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-                        })()}
-                      </div>
-                  </div>
-                </div>
-              ))}
-              {isLoading && (
-                <div className="message bot">
-                  <div className="message-avatar">🤖</div>
-                  <div className="message-content">
-                    <div className="loading-indicator">
-                      <span>Thinking</span>
-                      <div className="loading-dots">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        <div className="input-area">
-          <form onSubmit={handleSubmit} className="input-form">
-            <div className="input-wrapper">
-              <textarea
-                ref={inputRef}
-                value={inputText}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInputText(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Type your message here... (Press Enter to send)"
-                className="message-input"
-                disabled={isLoading}
-                rows={1}
-              />
-            </div>
-            <button
-              type="submit"
-              className="send-button"
-              disabled={!inputText.trim() || isLoading}
-              title="Send message"
-            >
-              ➤
-            </button>
-          </form>
-        </div>
+        <MessageList
+          messages={activeSession ? activeSession.messages : []}
+          isLoading={isLoading}
+          messagesEndRef={messagesEndRef}
+          suggestions={MockAIService.getSuggestedQuestions()}
+          onSuggestionClick={(suggestion: string) => {
+            sendMessage(suggestion);
+            setInputText('');
+            inputRef.current?.focus();
+          }}
+        />
+        <InputArea
+          inputText={inputText}
+          onInputChange={handleInputChange}
+          onKeyPress={handleKeyPress}
+          onSubmit={handleSubmit}
+          isLoading={isLoading}
+          inputRef={inputRef}
+        />
       </div>
+      
     </div>
   );
 };
