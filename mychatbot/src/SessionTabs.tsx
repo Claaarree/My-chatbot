@@ -9,10 +9,10 @@ interface SessionTabsProps {
   onDelete: (id: string) => void;
 }
 
-const SessionTabs: React.FC<SessionTabsProps> = ({ sessions, activeSessionId, onSwitch, onNew, onDelete }) => (
+const SessionTabs: React.FC<SessionTabsProps> = ({ sessions, activeSessionId, onSwitch, onDelete }) => (
   <div className="session-tabs">
     {sessions.map(session => (
-      <div key={session.id} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+      <div key={session.id} className="session-tab-wrapper">
         <button
           className={`session-tab${session.id === activeSessionId ? ' active' : ''}`}
           onClick={() => onSwitch(session.id)}
@@ -24,16 +24,13 @@ const SessionTabs: React.FC<SessionTabsProps> = ({ sessions, activeSessionId, on
             className="session-tab-close"
             title="Delete chat"
             onClick={() => onDelete(session.id)}
-            style={{ position: 'absolute', right: 4, top: 4, width: 24, height: 24, border: 'none', background: 'transparent', color: '#888', fontSize: 20, cursor: 'pointer', borderRadius: '50%' }}
           >
             ×
           </button>
         )}
       </div>
     ))}
-    <button className="session-tab new-session" onClick={onNew} title="Start new chat">
-      ＋
-    </button>
+    {/* Removed new chat button from here */}
   </div>
 );
 
