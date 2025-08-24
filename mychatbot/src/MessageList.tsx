@@ -8,8 +8,9 @@ interface MessageListProps {
   suggestions?: string[];
   onSuggestionClick?: (suggestion: string) => void;
   searchTerm?: string;
-  filteredMessages?: Message[];
-  onJumpToMessage?: (messageId: string) => void;
+  filteredMessages?: (Message & { sessionId?: string; sessionName?: string })[];
+  onJumpToMessage?: (messageId: string, sessionId?: string) => void;
+  onDeleteMessage?: (messageId: string) => void;
   onNewChat?: () => void;
 }
 
@@ -22,6 +23,7 @@ const MessageList: React.FC<MessageListProps> = ({
   searchTerm,
   filteredMessages,
   onJumpToMessage,
+  onDeleteMessage,
   onNewChat
 }) => {
   
@@ -127,15 +129,13 @@ const MessageList: React.FC<MessageListProps> = ({
         <>
           {/* When searching, show only search results */}
           {searchTerm ? (
-            filteredMessages && filteredMessages.length > 0 ? (
-              <div className="search-results-section">
-                <h4>Search Results ({filteredMessages.length})</h4>
-                <div className="search-results-list">
-                  {filteredMessages.map((message: Message) => (
+            filteredMessages && filteredMessages.length > 0 ? (              <div className="search-results-section">
+                <h4>Search Results ({filteredMessages.length}) - All Sessions</h4><div className="search-results-list">
+                  {filteredMessages.map((message) => (
                     <div 
                       key={`search-${message.id}`} 
                       className={`search-result-item ${message.sender}`}
-                      onClick={() => onJumpToMessage && onJumpToMessage(message.id)}
+                      onClick={() => onJumpToMessage && onJumpToMessage(message.id, message.sessionId)}
                     >
                       <div className="search-result-avatar">
                         {message.sender === 'user' ? '👤' : '🤖'}
@@ -144,14 +144,21 @@ const MessageList: React.FC<MessageListProps> = ({
                         <div className="search-result-text">
                           {highlightSearchTerm(message.text, searchTerm)}
                         </div>
-                        <div className="search-result-time">
-                          {(() => {
-                            const d = new Date(message.timestamp);
-                            const day = String(d.getDate()).padStart(2, '0');
-                            const month = String(d.getMonth() + 1).padStart(2, '0');
-                            const year = d.getFullYear();
-                            return `${day}/${month}/${year} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-                          })()}
+                        <div className="search-result-meta">
+                          <div className="search-result-time">
+                            {(() => {
+                              const d = new Date(message.timestamp);
+                              const day = String(d.getDate()).padStart(2, '0');
+                              const month = String(d.getMonth() + 1).padStart(2, '0');
+                              const year = d.getFullYear();
+                              return `${day}/${month}/${year} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                            })()}
+                          </div>
+                          {message.sessionName && (
+                            <div className="search-result-session">
+                              📂 {message.sessionName}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -184,8 +191,7 @@ const MessageList: React.FC<MessageListProps> = ({
                             const year = d.getFullYear();
                             return `${day}/${month}/${year} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
                           })()}
-                        </span>
-                        <div className="message-action-buttons">
+                        </span>                        <div className="message-action-buttons">
                           <button
                             className="copy-button"
                             title="Copy message"
@@ -199,6 +205,13 @@ const MessageList: React.FC<MessageListProps> = ({
                             onClick={() => speakMessage(message.text)}
                           >
                             <img src="/speaker-svgrepo-com.svg" alt="speaker" />
+                          </button>
+                          <button
+                            className="delete-button"
+                            title="Delete message"
+                            onClick={() => onDeleteMessage && onDeleteMessage(message.id)}
+                          >
+                            <img src="/delete-svgrepo-com.svg" alt="delete" />
                           </button>
                         </div>
                       </div>

@@ -4,6 +4,7 @@ import { MockAIService } from './mockAI';
 import SessionTabs from './SessionTabs';
 import MessageList from './MessageList';
 import InputArea from './InputArea';
+import jsPDF from 'jspdf';
 
 
 const LOCAL_STORAGE_KEY = 'mychatbot_sessions';
@@ -58,6 +59,7 @@ const App: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -85,7 +87,6 @@ const App: React.FC = () => {
       inputRef.current?.focus();
     }
   }, [isLoading]);
-
   // Close sidebar when clicking outside (on overlay)
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -104,6 +105,19 @@ const App: React.FC = () => {
     };
     document.addEventListener('mousedown', handleClick);    return () => document.removeEventListener('mousedown', handleClick);
   }, [sidebarOpen]);
+
+  // Close export dropdown when clicking outside
+  useEffect(() => {
+    if (!showExportDropdown) return;
+    const handleClick = (e: MouseEvent) => {
+      const dropdown = document.querySelector('.export-dropdown-container');
+      if (dropdown && !dropdown.contains(e.target as Node)) {
+        setShowExportDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showExportDropdown]);
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -159,15 +173,15 @@ const App: React.FC = () => {
     e.preventDefault();
     sendMessage(inputText);
   };
-
   const handleNewSession = () => {
     const newId = `session-${Date.now()}`;
     setSessions(prev => [...prev, { id: newId, name: `Chat ${prev.length + 1}`, messages: [] }]);
     setActiveSessionId(newId);
+    setSearchTerm(''); // Clear search when creating new session
   };
-
   const handleSwitchSession = (id: string) => {
     setActiveSessionId(id);
+    setSearchTerm(''); // Clear search when switching sessions
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -183,23 +197,46 @@ const App: React.FC = () => {
   } else {
     setInputText(e.target.value);
   }
-};
-  const activeSession = sessions.find(s => s.id === activeSessionId);
+};  const activeSession = sessions.find(s => s.id === activeSessionId);
   
-  // Search functionality
+  // Search functionality - search across ALL sessions
   const filteredMessages = useMemo(() => {
     if (!searchTerm.trim()) {
       return activeSession?.messages || [];
     }
     
-    return (activeSession?.messages || []).filter(message =>
-      message.text.toLowerCase().includes(searchTerm.toLowerCase())
-    );  }, [activeSession?.messages, searchTerm]);
+    // Search through all sessions and flatten results
+    const allMatchingMessages: (Message & { sessionId: string; sessionName: string })[] = [];
+    
+    sessions.forEach(session => {
+      const matchingMessages = session.messages.filter(message =>
+        message.text.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      
+      // Add session info to each matching message
+      matchingMessages.forEach(message => {
+        allMatchingMessages.push({
+          ...message,
+          sessionId: session.id,
+          sessionName: session.name
+        });
+      });
+    });
+    
+    // Sort by timestamp (most recent first)
+    return allMatchingMessages.sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }, [sessions, searchTerm]);
   const clearSearch = () => {
     setSearchTerm('');
   };
-
-  const handleJumpToMessage = (messageId: string) => {
+  const handleJumpToMessage = (messageId: string, sessionId?: string) => {
+    // If message is from a different session, switch to that session first
+    if (sessionId && sessionId !== activeSessionId) {
+      setActiveSessionId(sessionId);
+    }
+    
     // Clear search to show all messages
     clearSearch();
     
@@ -217,8 +254,195 @@ const App: React.FC = () => {
         setTimeout(() => {
           messageElement.classList.remove('message-highlighted');
         }, 2000);
+      }    }, 100);
+  };  const handleDeleteMessage = (messageId: string) => {
+    setSessions(prev => 
+      prev.map(session => ({
+        ...session,
+        messages: session.messages.filter(message => message.id !== messageId)
+      }))
+    );
+  };
+  // Helper function to save file with File System Access API
+  const saveFileWithPicker = async (blob: Blob, suggestedName: string, mimeType: string): Promise<'success' | 'cancelled' | 'unsupported'> => {
+    // Check if File System Access API is supported
+    if ('showSaveFilePicker' in window) {
+      try {
+        const fileHandle = await (window as any).showSaveFilePicker({
+          suggestedName,
+          types: [{
+            description: 'Export file',
+            accept: {
+              [mimeType]: [`.${suggestedName.split('.').pop()}`]
+            }
+          }]
+        });
+        
+        const writable = await fileHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return 'success';
+      } catch (err) {
+        // User cancelled
+        if ((err as Error).name === 'AbortError') {
+          return 'cancelled';
+        }
+        // Other error occurred
+        console.error('Error saving file:', err);
+        return 'unsupported';
       }
-    }, 100);
+    }
+    return 'unsupported';
+  };const exportChatInFormat = async (format: 'json' | 'txt' | 'csv' | 'pdf') => {
+    const currentSession = sessions.find(s => s.id === activeSessionId);
+    if (!currentSession) return;
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    const sessionNameClean = currentSession.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    
+    if (format === 'pdf') {
+      // Create PDF using jsPDF
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      const maxLineWidth = pageWidth - 2 * margin;
+      
+      // Title
+      doc.setFontSize(16);
+      doc.setFont(undefined, 'bold');
+      doc.text(`Chat Export: ${currentSession.name}`, margin, 30);
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Exported: ${new Date().toLocaleString()}`, margin, 40);
+      
+      let yPosition = 60;
+      const lineHeight = 6;
+      const messageSpacing = 12;
+      
+      currentSession.messages.forEach((msg) => {
+        const time = new Date(msg.timestamp).toLocaleString();
+        const sender = msg.sender === 'user' ? 'You' : 'Bot';
+        const header = `[${time}] ${sender}:`;
+        
+        // Check if we need a new page
+        if (yPosition > pageHeight - 40) {
+          doc.addPage();
+          yPosition = 30;
+        }
+        
+        // Message header
+        doc.setFont(undefined, 'bold');
+        doc.setFontSize(9);
+        doc.text(header, margin, yPosition);
+        yPosition += lineHeight;
+          // Message content
+        doc.setFont(undefined, 'normal');
+        doc.setFontSize(10);
+        
+        // Split long messages into multiple lines
+        const splitText = doc.splitTextToSize(msg.text, maxLineWidth) as string[];
+        
+        splitText.forEach((line: string) => {
+          if (yPosition > pageHeight - 20) {
+            doc.addPage();
+            yPosition = 30;
+          }
+          doc.text(line, margin, yPosition);
+          yPosition += lineHeight;
+        });
+        
+        yPosition += messageSpacing;
+      });
+        // Use File System Access API for PDF if supported
+      const filename = `chat-${sessionNameClean}-${timestamp}.pdf`;
+      const pdfBlob = doc.output('blob');
+      
+      const saveResult = await saveFileWithPicker(pdfBlob, filename, 'application/pdf');
+      if (saveResult === 'success') {
+        setShowExportDropdown(false);
+        return;
+      } else if (saveResult === 'cancelled') {
+        // User cancelled, don't download
+        setShowExportDropdown(false);
+        return;
+      }
+      
+      // Fallback to regular download only if unsupported
+      doc.save(filename);
+      setShowExportDropdown(false);
+      return;
+    }    
+    let content: string;
+    let mimeType: string;
+    let fileExtension: string;
+
+    switch (format) {
+      case 'txt':
+        content = `Chat Export: ${currentSession.name}\nExported: ${new Date().toLocaleString()}\n\n` +
+          currentSession.messages.map(msg => {
+            const time = new Date(msg.timestamp).toLocaleString();
+            const sender = msg.sender === 'user' ? 'You' : 'Bot';
+            return `[${time}] ${sender}: ${msg.text}`;
+          }).join('\n\n');
+        mimeType = 'text/plain';
+        fileExtension = 'txt';
+        break;
+        
+      case 'csv':
+        const csvHeader = 'Timestamp,Sender,Message\n';
+        const csvRows = currentSession.messages.map(msg => {
+          const timestamp = new Date(msg.timestamp).toISOString();
+          const sender = msg.sender === 'user' ? 'User' : 'Bot';
+          const message = `"${msg.text.replace(/"/g, '""')}"`;
+          return `${timestamp},${sender},${message}`;
+        }).join('\n');
+        content = csvHeader + csvRows;
+        mimeType = 'text/csv';
+        fileExtension = 'csv';
+        break;
+        
+      default: // json
+        const exportData = {
+          sessionName: currentSession.name,
+          exportDate: new Date().toISOString(),
+          messages: currentSession.messages.map(msg => ({
+            sender: msg.sender,
+            text: msg.text,
+            timestamp: msg.timestamp
+          }))
+        };
+        content = JSON.stringify(exportData, null, 2);
+        mimeType = 'application/json';
+        fileExtension = 'json';
+        break;
+    }    const filename = `chat-${sessionNameClean}-${timestamp}.${fileExtension}`;
+    const blob = new Blob([content], { type: mimeType });
+    
+    // Try File System Access API first
+    const saveResult = await saveFileWithPicker(blob, filename, mimeType);
+    if (saveResult === 'success') {
+      setShowExportDropdown(false);
+      return;
+    } else if (saveResult === 'cancelled') {
+      // User cancelled, don't download
+      setShowExportDropdown(false);
+      return;
+    }
+    
+    // Fallback to regular download only if unsupported
+    const dataUri = `data:${mimeType};charset=utf-8,${encodeURIComponent(content)}`;
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', filename);
+    linkElement.click();
+    
+    setShowExportDropdown(false);
+  };
+
+  const handleExportButtonClick = () => {
+    setShowExportDropdown(!showExportDropdown);
   };
   
   return (
@@ -261,10 +485,16 @@ const App: React.FC = () => {
           }}
           onNew={() => {}}
         />
-      </aside>
-      <div className="chat-main">        <header className="header">
+      </aside>      <div className="chat-main">        <header className="header">
+          <button
+            className="sidebar-toggle-left"
+            onClick={() => setSidebarOpen((open) => !open)}
+            aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+          >
+            {sidebarOpen ? '❮' : '❯'}
+          </button>
           <h1>🤖 My Chatbot</h1>
-          <p>Your friendly AI assistant answering questions since 2022</p>          <div className="search-container">
+          <p>Your friendly AI assistant</p><div className="search-container">
             <div className="search-input-wrapper">
               <input
                 type="text"
@@ -287,16 +517,26 @@ const App: React.FC = () => {
               <div className="search-results-info">
                 {filteredMessages.length} result{filteredMessages.length !== 1 ? 's' : ''}
               </div>
-            )}
+            )}          </div>          <div className="header-actions">
+            <div className="export-dropdown-container">
+              <button
+                className="export-button"
+                onClick={handleExportButtonClick}
+                title="Export current chat"
+                aria-label="Export current chat"
+              >
+                <img src="/export-svgrepo-com.svg" alt="export" />
+              </button>              {showExportDropdown && (
+                <div className="export-dropdown">
+                  <button onClick={() => exportChatInFormat('json')}>Export as JSON</button>
+                  <button onClick={() => exportChatInFormat('txt')}>Export as TXT</button>
+                  <button onClick={() => exportChatInFormat('csv')}>Export as CSV</button>
+                  <button onClick={() => exportChatInFormat('pdf')}>Export as PDF</button>
+                </div>
+              )}
+            </div>
           </div>
-          <button
-            className="sidebar-toggle sidebar-toggle-active"
-            onClick={() => setSidebarOpen((open) => !open)}
-            aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-          >
-            {sidebarOpen ? '❮' : '❯'}
-          </button>
-        </header>        <div className="chat-container">          <MessageList
+        </header><div className="chat-container">          <MessageList
             messages={searchTerm ? filteredMessages : activeSession?.messages || []}
             isLoading={isLoading}
             messagesEndRef={messagesEndRef}
@@ -304,6 +544,7 @@ const App: React.FC = () => {
             searchTerm={searchTerm}
             filteredMessages={filteredMessages}
             onJumpToMessage={handleJumpToMessage}
+            onDeleteMessage={handleDeleteMessage}
             onSuggestionClick={(suggestion: string) => {
               sendMessage(suggestion);
               setInputText('');
