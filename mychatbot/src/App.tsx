@@ -56,7 +56,7 @@ const App: React.FC = () => {
     return 'session-1';
   });  const [isLoading, setIsLoading] = useState(false);
   const [inputText, setInputText] = useState('');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
