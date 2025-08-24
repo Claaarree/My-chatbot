@@ -4,8 +4,7 @@ import { MockAIService } from './mockAI';
 import SessionTabs from './SessionTabs';
 import MessageList from './MessageList';
 import InputArea from './InputArea';
-import jsPDF from 'jspdf';
-
+import { saveFileWithPicker, getExportContent, exportSessionAsPDF } from './ChatExport';
 
 const LOCAL_STORAGE_KEY = 'mychatbot_sessions';
 
@@ -197,7 +196,8 @@ const App: React.FC = () => {
   } else {
     setInputText(e.target.value);
   }
-};  const activeSession = sessions.find(s => s.id === activeSessionId);
+};  
+const activeSession = sessions.find(s => s.id === activeSessionId);
   
   // Search functionality - search across ALL sessions
   const filteredMessages = useMemo(() => {
@@ -255,7 +255,8 @@ const App: React.FC = () => {
           messageElement.classList.remove('message-highlighted');
         }, 2000);
       }    }, 100);
-  };  const handleDeleteMessage = (messageId: string) => {
+  };  
+  const handleDeleteMessage = (messageId: string) => {
     setSessions(prev => 
       prev.map(session => ({
         ...session,
@@ -263,182 +264,31 @@ const App: React.FC = () => {
       }))
     );
   };
-  // Helper function to save file with File System Access API
-  const saveFileWithPicker = async (blob: Blob, suggestedName: string, mimeType: string): Promise<'success' | 'cancelled' | 'unsupported'> => {
-    // Check if File System Access API is supported
-    if ('showSaveFilePicker' in window) {
-      try {
-        const fileHandle = await (window as any).showSaveFilePicker({
-          suggestedName,
-          types: [{
-            description: 'Export file',
-            accept: {
-              [mimeType]: [`.${suggestedName.split('.').pop()}`]
-            }
-          }]
-        });
-        
-        const writable = await fileHandle.createWritable();
-        await writable.write(blob);
-        await writable.close();
-        return 'success';
-      } catch (err) {
-        // User cancelled
-        if ((err as Error).name === 'AbortError') {
-          return 'cancelled';
-        }
-        // Other error occurred
-        console.error('Error saving file:', err);
-        return 'unsupported';
-      }
-    }
-    return 'unsupported';
-  };const exportChatInFormat = async (format: 'json' | 'txt' | 'csv' | 'pdf') => {
+
+  const exportChatInFormat = async (format: 'json' | 'txt' | 'csv' | 'pdf') => {
     const currentSession = sessions.find(s => s.id === activeSessionId);
     if (!currentSession) return;
-
     const timestamp = new Date().toISOString().split('T')[0];
     const sessionNameClean = currentSession.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    
     if (format === 'pdf') {
-      // Create PDF using jsPDF
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 20;
-      const maxLineWidth = pageWidth - 2 * margin;
-      
-      // Title
-      doc.setFontSize(16);
-      doc.setFont(undefined, 'bold');
-      doc.text(`Chat Export: ${currentSession.name}`, margin, 30);
-      
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'normal');
-      doc.text(`Exported: ${new Date().toLocaleString()}`, margin, 40);
-      
-      let yPosition = 60;
-      const lineHeight = 6;
-      const messageSpacing = 12;
-      
-      currentSession.messages.forEach((msg) => {
-        const time = new Date(msg.timestamp).toLocaleString();
-        const sender = msg.sender === 'user' ? 'You' : 'Bot';
-        const header = `[${time}] ${sender}:`;
-        
-        // Check if we need a new page
-        if (yPosition > pageHeight - 40) {
-          doc.addPage();
-          yPosition = 30;
-        }
-        
-        // Message header
-        doc.setFont(undefined, 'bold');
-        doc.setFontSize(9);
-        doc.text(header, margin, yPosition);
-        yPosition += lineHeight;
-          // Message content
-        doc.setFont(undefined, 'normal');
-        doc.setFontSize(10);
-        
-        // Split long messages into multiple lines
-        const splitText = doc.splitTextToSize(msg.text, maxLineWidth) as string[];
-        
-        splitText.forEach((line: string) => {
-          if (yPosition > pageHeight - 20) {
-            doc.addPage();
-            yPosition = 30;
-          }
-          doc.text(line, margin, yPosition);
-          yPosition += lineHeight;
-        });
-        
-        yPosition += messageSpacing;
-      });
-        // Use File System Access API for PDF if supported
       const filename = `chat-${sessionNameClean}-${timestamp}.pdf`;
-      const pdfBlob = doc.output('blob');
-      
-      const saveResult = await saveFileWithPicker(pdfBlob, filename, 'application/pdf');
-      if (saveResult === 'success') {
-        setShowExportDropdown(false);
-        return;
-      } else if (saveResult === 'cancelled') {
-        // User cancelled, don't download
-        setShowExportDropdown(false);
-        return;
-      }
-      
-      // Fallback to regular download only if unsupported
-      doc.save(filename);
+      const saveResult = await exportSessionAsPDF(currentSession, filename);
       setShowExportDropdown(false);
-      return;
-    }    
-    let content: string;
-    let mimeType: string;
-    let fileExtension: string;
-
-    switch (format) {
-      case 'txt':
-        content = `Chat Export: ${currentSession.name}\nExported: ${new Date().toLocaleString()}\n\n` +
-          currentSession.messages.map(msg => {
-            const time = new Date(msg.timestamp).toLocaleString();
-            const sender = msg.sender === 'user' ? 'You' : 'Bot';
-            return `[${time}] ${sender}: ${msg.text}`;
-          }).join('\n\n');
-        mimeType = 'text/plain';
-        fileExtension = 'txt';
-        break;
-        
-      case 'csv':
-        const csvHeader = 'Timestamp,Sender,Message\n';
-        const csvRows = currentSession.messages.map(msg => {
-          const timestamp = new Date(msg.timestamp).toISOString();
-          const sender = msg.sender === 'user' ? 'User' : 'Bot';
-          const message = `"${msg.text.replace(/"/g, '""')}"`;
-          return `${timestamp},${sender},${message}`;
-        }).join('\n');
-        content = csvHeader + csvRows;
-        mimeType = 'text/csv';
-        fileExtension = 'csv';
-        break;
-        
-      default: // json
-        const exportData = {
-          sessionName: currentSession.name,
-          exportDate: new Date().toISOString(),
-          messages: currentSession.messages.map(msg => ({
-            sender: msg.sender,
-            text: msg.text,
-            timestamp: msg.timestamp
-          }))
-        };
-        content = JSON.stringify(exportData, null, 2);
-        mimeType = 'application/json';
-        fileExtension = 'json';
-        break;
-    }    const filename = `chat-${sessionNameClean}-${timestamp}.${fileExtension}`;
-    const blob = new Blob([content], { type: mimeType });
-    
-    // Try File System Access API first
-    const saveResult = await saveFileWithPicker(blob, filename, mimeType);
-    if (saveResult === 'success') {
-      setShowExportDropdown(false);
-      return;
-    } else if (saveResult === 'cancelled') {
-      // User cancelled, don't download
-      setShowExportDropdown(false);
+      if (saveResult !== 'success') return;
       return;
     }
-    
+    const { content, mimeType, fileExtension } = getExportContent(currentSession, format);
+    const filename = `chat-${sessionNameClean}-${timestamp}.${fileExtension}`;
+    const blob = new Blob([content], { type: mimeType });
+    const saveResult = await saveFileWithPicker(blob, filename, mimeType);
+    setShowExportDropdown(false);
+    if (saveResult === 'success' || saveResult === 'cancelled') return;
     // Fallback to regular download only if unsupported
     const dataUri = `data:${mimeType};charset=utf-8,${encodeURIComponent(content)}`;
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', filename);
     linkElement.click();
-    
-    setShowExportDropdown(false);
   };
 
   const handleExportButtonClick = () => {
@@ -536,7 +386,8 @@ const App: React.FC = () => {
               )}
             </div>
           </div>
-        </header><div className="chat-container">          <MessageList
+        </header><div className="chat-container">          
+          <MessageList
             messages={searchTerm ? filteredMessages : activeSession?.messages || []}
             isLoading={isLoading}
             messagesEndRef={messagesEndRef}
